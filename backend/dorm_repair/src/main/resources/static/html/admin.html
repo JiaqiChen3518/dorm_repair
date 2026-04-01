@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宿舍报修管理系统 - 管理员</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="card">
+                <div class="user-info">
+                    <div>
+                        <strong>👤 {{ userInfo.account }}</strong>
+                        <span style="margin-left: 10px; color: #666;">管理员</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary" @click="logout">退出</button>
+                    </div>
+                </div>
+
+                <!-- 管理员菜单 -->
+                <div v-if="currentView === 'menu'" class="menu-grid">
+                    <div class="menu-item" @click="currentView = 'allOrders'; loadAllOrders()">
+                        <span>📋</span>
+                        <div>查看所有报修单</div>
+                    </div>
+                    <div class="menu-item" @click="currentView = 'statistics'; loadStatistics()">
+                        <span>📊</span>
+                        <div>报修统计</div>
+                    </div>
+                    <div class="menu-item" @click="currentView = 'evaluations'; loadEvaluations()">
+                        <span>⭐</span>
+                        <div>评价管理</div>
+                    </div>
+                    <div class="menu-item" @click="currentView = 'profile'">
+                        <span>⚙️</span>
+                        <div>修改密码</div>
+                    </div>
+                </div>
+
+                <!-- 所有报修单列表 -->
+                <div v-if="currentView === 'allOrders'">
+                    <h3 style="margin-bottom: 20px;">所有报修单</h3>
+                    <div class="filter-bar">
+                        <select v-model="adminOrderFilter.status" @change="loadAllOrders">
+                            <option :value="null">全部状态</option>
+                            <option :value="0">待处理</option>
+                            <option :value="1">处理中</option>
+                            <option :value="2">已完成</option>
+                            <option :value="3">已取消</option>
+                        </select>
+                        <input type="text" v-model="adminOrderFilter.building" placeholder="楼栋筛选" @input="loadAllOrders">
+                    </div>
+                    <div v-if="allOrders.length === 0" class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <p>暂无报修记录</p>
+                    </div>
+                    <table v-else class="table">
+                        <thead>
+                            <tr>
+                                <th>单号</th>
+                                <th>报修人</th>
+                                <th>宿舍</th>
+                                <th>设备</th>
+                                <th>优先级</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="order in allOrders" :key="order.id">
+                                <td>{{ order.orderNo }}</td>
+                                <td>{{ order.userName }}</td>
+                                <td>{{ order.building }}-{{ order.room }}</td>
+                                <td>{{ getDeviceTypeText(order.deviceType) }}</td>
+                                <td><span class="badge" :class="'badge-' + getPriorityClass(order.priority)">{{ getPriorityText(order.priority) }}</span></td>
+                                <td><span class="badge" :class="'badge-' + getStatusClass(order.status)">{{ getStatusText(order.status) }}</span></td>
+                                <td>{{ formatDate(order.createTime) }}</td>
+                                <td>
+                                    <button class="btn btn-secondary" style="padding: 6px 12px;" @click="viewOrderDetail(order)">详情</button>
+                                    <button v-if="order.status === 0" class="btn btn-primary" style="padding: 6px 12px;" @click="processOrder(order.id)">处理</button>
+                                    <button v-if="order.status === 1" class="btn btn-success" style="padding: 6px 12px;" @click="openCompleteModal(order)">完成</button>
+                                    <button class="btn btn-danger" style="padding: 6px 12px;" @click="deleteOrder(order.id)">删除</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'" style="margin-top: 20px;">返回</button>
+                </div>
+
+                <!-- 报修统计 -->
+                <div v-if="currentView === 'statistics'">
+                    <h3 style="margin-bottom: 20px;">报修统计</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>{{ statistics.total }}</h3>
+                            <p>总报修数</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>{{ statistics.pending }}</h3>
+                            <p>待处理</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>{{ statistics.processing }}</h3>
+                            <p>处理中</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>{{ statistics.completed }}</h3>
+                            <p>已完成</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'">返回</button>
+                </div>
+
+                <!-- 评价管理 -->
+                <div v-if="currentView === 'evaluations'">
+                    <h3 style="margin-bottom: 20px;">评价管理</h3>
+                    <div v-if="evaluations.length === 0" class="empty-state">
+                        <div class="empty-state-icon">⭐</div>
+                        <p>暂无评价</p>
+                    </div>
+                    <div v-else>
+                        <div v-for="eval in evaluations" :key="eval.id" class="card">
+                            <div style="display: flex; justify-content: space-between;">
+                                <div>
+                                    <strong>报修单：{{ eval.orderNo }}</strong>
+                                    <div class="rating">
+                                        <span v-for="n in 5" :key="n" class="star" :class="{active: n <= eval.rating}">★</span>
+                                    </div>
+                                </div>
+                                <small style="color: #999;">{{ formatDate(eval.createTime) }}</small>
+                            </div>
+                            <p style="margin-top: 10px;">{{ eval.content }}</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'" style="margin-top: 20px;">返回</button>
+                </div>
+
+                <!-- 修改密码 -->
+                <div v-if="currentView === 'profile'">
+                    <h3 style="margin-bottom: 20px;">修改密码</h3>
+                    <div class="form-group">
+                        <label>原密码</label>
+                        <input type="password" v-model="passwordForm.oldPassword" placeholder="请输入原密码">
+                    </div>
+                    <div class="form-group">
+                        <label>新密码</label>
+                        <input type="password" v-model="passwordForm.newPassword" placeholder="请输入新密码">
+                    </div>
+                    <div class="form-group">
+                        <label>确认新密码</label>
+                        <input type="password" v-model="passwordForm.confirmPassword" placeholder="请再次输入新密码">
+                    </div>
+                    <button class="btn btn-primary" @click="updatePassword">保存</button>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'">返回</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showOrderDetail" class="modal-overlay" @click.self="showOrderDetail = false">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>📋 报修单详情</h3>
+                    <button class="modal-close" @click="showOrderDetail = false">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">单号</span>
+                        <span class="order-detail-value">{{ selectedOrder.orderNo }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">报修人</span>
+                        <span class="order-detail-value">{{ selectedOrder.userName }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">宿舍</span>
+                        <span class="order-detail-value">{{ selectedOrder.building }}-{{ selectedOrder.room }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">设备类型</span>
+                        <span class="order-detail-value">{{ getDeviceTypeText(selectedOrder.deviceType) }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">优先级</span>
+                        <span class="order-detail-value">{{ getPriorityText(selectedOrder.priority) }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">状态</span>
+                        <span class="order-detail-value">
+                            <span class="order-status-badge" :class="getStatusClass(selectedOrder.status)">
+                                {{ getStatusText(selectedOrder.status) }}
+                            </span>
+                        </span>
+                    </div>
+                    <div class="order-detail-item" style="flex-direction: column;">
+                        <span class="order-detail-label" style="margin-bottom: 8px;">问题描述</span>
+                        <span class="order-detail-value description">{{ selectedOrder.description }}</span>
+                    </div>
+                    <div v-if="selectedOrder.images && selectedOrder.images.trim()" class="order-detail-item" style="flex-direction: column;">
+                        <span class="order-detail-label" style="margin-bottom: 8px;">报修图片</span>
+                        <div class="image-gallery">
+                            <div class="gallery-images">
+                                <img v-for="(img, index) in selectedOrder.images.split(',')" :key="index" :src="img.trim()" 
+                                     @click="window.open(img.trim(), '_blank')"
+                                     @error="console.error('图片加载失败:', img)">
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="selectedOrder.handleNote" class="order-detail-item" style="flex-direction: column;">
+                        <span class="order-detail-label" style="margin-bottom: 8px;">处理备注</span>
+                        <span class="order-detail-value description">{{ selectedOrder.handleNote }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">创建时间</span>
+                        <span class="order-detail-value" style="color: #999; font-weight: 400;">{{ formatDate(selectedOrder.createTime) }}</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showOrderDetail = false">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 完成报修单弹窗 -->
+        <div v-if="showCompleteModal" class="modal-overlay" @click.self="showCompleteModal = false">
+            <div class="modal">
+                <h3 style="margin-bottom: 20px;">完成报修单</h3>
+                <div class="form-group">
+                    <label>处理备注</label>
+                    <textarea v-model="completeForm.note" placeholder="请输入处理备注..."></textarea>
+                </div>
+                <button class="btn btn-primary" @click="completeOrder">确认完成</button>
+                <button class="btn btn-secondary" @click="showCompleteModal = false">取消</button>
+            </div>
+        </div>
+
+        <!-- 提示信息 -->
+        <div v-if="toast.show" class="toast" :class="'toast-' + toast.type">
+            {{ toast.message }}
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    userInfo: {},
+                    currentView: 'menu',
+                    // 修改密码表单数据
+                    passwordForm: {
+                        oldPassword: '',
+                        newPassword: '',
+                        confirmPassword: ''
+                    },
+                    // 完成报修单表单数据
+                    completeForm: {
+                        orderId: null,
+                        note: ''
+                    },
+                    allOrders: [],
+                    evaluations: [],
+                    // 报修统计
+                    statistics: {
+                        total: 0,
+                        pending: 0,
+                        processing: 0,
+                        completed: 0
+                    },
+                    // 报修单筛选条件
+                    adminOrderFilter: {
+                        status: null,
+                        building: ''
+                    },
+                    showOrderDetail: false,
+                    showCompleteModal: false,
+                    selectedOrder: {},
+                    toast: {
+                        show: false,
+                        message: '',
+                        type: 'success'
+                    }
+                };
+            },
+            created() {
+                // 初始化axios拦截器
+                this.setupAxiosInterceptor();
+            },
+            mounted() {
+                this.loadUserInfo();
+                this.verifySession();
+            },
+            methods: {
+                // 初始化axios拦截器
+                setupAxiosInterceptor() {
+                    axios.interceptors.request.use(
+                        config => {
+                            const token = localStorage.getItem('token');
+                            if (token) {
+                                config.headers.Authorization = 'Bearer ' + token;
+                            }
+                            return config;
+                        },
+                        error => {
+                            return Promise.reject(error);
+                        }
+                    );
+                    axios.interceptors.response.use(
+                        response => response,
+                        error => {
+                            if (error.response && error.response.status === 401) {
+                                this.handleSessionExpired();
+                            }
+                            return Promise.reject(error);
+                        }
+                    );
+                },
+                loadUserInfo() {
+                    const userInfo = localStorage.getItem('userInfo');
+                    if (userInfo) {
+                        this.userInfo = JSON.parse(userInfo);
+                    } else {
+                        window.location.href = 'login.html';
+                    }
+                },
+                verifySession() {
+                    axios.get('/api/user/info')
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                // 登录成功，加载统计
+                                this.loadStatistics();
+                            } else {
+                                this.handleSessionExpired();
+                            }
+                        })
+                        .catch(error => {
+                            if (error.response && error.response.status === 401) {
+                                this.handleSessionExpired();
+                            } else {
+                                console.error('验证session失败:', error);
+                            }
+                        });
+                },
+                handleSessionExpired() {
+                    localStorage.removeItem('userInfo');
+                    localStorage.removeItem('userRole');
+                    this.showToast('登录已过期，请重新登录', 'error');
+                    setTimeout(() => {
+                        window.location.href = 'login.html';
+                    }, 1000);
+                },
+                logout() {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('userInfo');
+                    localStorage.removeItem('userRole');
+                    window.location.href = 'login.html';
+                },
+                loadAllOrders() {
+                    axios.get('/api/order/all', { params: this.adminOrderFilter })
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.allOrders = res.data.data;
+                            }
+                        });
+                },
+                viewOrderDetail(order) {
+                    this.selectedOrder = order;
+                    this.showOrderDetail = true;
+                },
+                processOrder(orderId) {
+                    axios.post('/api/order/updateStatus', { orderId: orderId, status: 1 })
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.showToast('报修单已开始处理');
+                                this.loadAllOrders();
+                            } else {
+                                this.showToast(res.data.msg, 'error');
+                            }
+                        });
+                },
+                openCompleteModal(order) {
+                    this.completeForm.orderId = order.id;
+                    this.showCompleteModal = true;
+                },
+                completeOrder() {
+                    if (!this.completeForm.note) {
+                        this.showToast('请输入处理备注', 'error');
+                        return;
+                    }
+                    axios.post('/api/order/complete', this.completeForm)
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.showToast('报修单已完成');
+                                this.showCompleteModal = false;
+                                this.loadAllOrders();
+                            } else {
+                                this.showToast(res.data.msg, 'error');
+                            }
+                        });
+                },
+                deleteOrder(orderId) {
+                    if (confirm('确定要删除这个报修单吗？')) {
+                        axios.post(`/api/order/delete/${orderId}`)
+                            .then(res => {
+                                if (res.data.code === 200) {
+                                    this.showToast('报修单已删除');
+                                    this.loadAllOrders();
+                                } else {
+                                    this.showToast(res.data.msg, 'error');
+                                }
+                            });
+                    }
+                },
+                loadStatistics() {
+                    axios.get('/api/order/statistics')
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.statistics = res.data.data;
+                            }
+                        });
+                },
+                loadEvaluations() {
+                    axios.get('/api/evaluation/all')
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.evaluations = res.data.data;
+                            }
+                        });
+                },
+                updatePassword() {
+                    if (!this.passwordForm.oldPassword || !this.passwordForm.newPassword || !this.passwordForm.confirmPassword) {
+                        this.showToast('请填写完整信息', 'error');
+                        return;
+                    }
+                    if (this.passwordForm.newPassword !== this.passwordForm.confirmPassword) {
+                        this.showToast('两次密码输入不一致', 'error');
+                        return;
+                    }
+                    axios.post('/api/user/updatePassword', this.passwordForm)
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.showToast('密码修改成功');
+                                this.passwordForm = {
+                                    oldPassword: '',
+                                    newPassword: '',
+                                    confirmPassword: ''
+                                };
+                            } else {
+                                this.showToast(res.data.msg, 'error');
+                            }
+                        });
+                },
+                getDeviceTypeText(type) {
+                    const types = { 1: '水龙头', 2: '电灯', 3: '门窗', 4: '空调', 5: '热水器', 6: '其他' };
+                    return types[type] || '未知';
+                },
+                getPriorityText(priority) {
+                    const priorities = { 1: '紧急', 2: '普通', 3: '低' };
+                    return priorities[priority] || '未知';
+                },
+                getPriorityClass(priority) {
+                    const classes = { 1: 'high', 2: 'normal', 3: 'low' };
+                    return classes[priority] || 'normal';
+                },
+                getStatusText(status) {
+                    const statuses = { 0: '待处理', 1: '处理中', 2: '已完成', 3: '已取消' };
+                    return statuses[status] || '未知';
+                },
+                getStatusClass(status) {
+                    const classes = { 0: 'pending', 1: 'processing', 2: 'completed', 3: 'cancelled' };
+                    return classes[status] || 'pending';
+                },
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    return date.toLocaleString('zh-CN');
+                },
+                showToast(message, type = 'success') {
+                    this.toast.message = message;
+                    this.toast.type = type;
+                    this.toast.show = true;
+                    setTimeout(() => {
+                        this.toast.show = false;
+                    }, 3000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

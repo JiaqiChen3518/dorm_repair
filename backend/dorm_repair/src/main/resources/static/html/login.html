@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宿舍报修管理系统 - 登录注册</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="card" style="max-width: 400px; margin: 100px auto;">
+                <div class="header">
+                    <h1>🏠 宿舍报修管理系统</h1>
+                    <p>请登录或注册</p>
+                </div>
+                <div class="tabs">
+                    <div class="tab" :class="{active: loginTab === 'login'}" @click="loginTab = 'login'">登录</div>
+                    <div class="tab" :class="{active: loginTab === 'register'}" @click="loginTab = 'register'">注册</div>
+                </div>
+                
+                <div v-if="loginTab === 'login'">
+                    <div class="form-group">
+                        <label>账号</label>
+                        <input type="text" v-model="loginForm.account" placeholder="请输入学号/工号">
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" v-model="loginForm.password" placeholder="请输入密码">
+                    </div>
+                    <div class="form-group">
+                        <label>验证码</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" v-model="loginForm.captcha" placeholder="请输入验证码" style="flex: 1;">
+                            <div class="captcha-box" @click="generateCaptcha" title="点击刷新验证码">
+                                {{ captchaCode }}
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" style="width: 100%;" @click="login">登录</button>
+                </div>
+                
+                <div v-if="loginTab === 'register'">
+                    <div class="form-group">
+                        <label>角色</label>
+                        <select v-model="registerForm.role">
+                            <option :value="1">学生</option>
+                            <option :value="2">维修人员/管理员</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>账号</label>
+                        <input type="text" v-model="registerForm.account" :placeholder="registerForm.role === 1 ? '学号（3125或3225开头）' : '工号（0025开头）'">
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" v-model="registerForm.password" placeholder="请输入密码">
+                    </div>
+                    <div class="form-group">
+                        <label>确认密码</label>
+                        <input type="password" v-model="registerForm.confirmPassword" placeholder="请再次输入密码">
+                    </div>
+                    <div class="form-group">
+                        <label>验证码</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" v-model="registerForm.captcha" placeholder="请输入验证码" style="flex: 1;">
+                            <div class="captcha-box" @click="generateCaptcha" title="点击刷新验证码">
+                                {{ captchaCode }}
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" style="width: 100%;" @click="register">注册</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="toast.show" class="toast" :class="'toast-' + toast.type">
+            {{ toast.message }}
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    loginTab: 'login',
+                    // 登录表单数据
+                    loginForm: {
+                        account: '',
+                        password: '',
+                        captcha: ''
+                    },
+                    // 注册表单数据
+                    registerForm: {
+                        account: '',
+                        password: '',
+                        confirmPassword: '',
+                        role: 1,
+                        captcha: ''
+                    },
+                    captchaCode: '', // 验证码
+                    // 提示信息
+                    toast: {
+                        show: false,
+                        message: '',
+                        type: 'success'
+                    }
+                };
+            },
+            mounted() {
+                this.generateCaptcha();
+            },
+            methods: {
+                // 生成验证码
+                generateCaptcha() {
+                    axios.get('/api/captcha/generate')
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.captchaCode = res.data.data;
+                            }
+                        });
+                },
+                login() {
+                    if (!this.loginForm.account || !this.loginForm.password || !this.loginForm.captcha) {
+                        this.showToast('请填写完整信息', 'error');
+                        return;
+                    }
+                    axios.post('/api/user/login', this.loginForm)
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                localStorage.setItem('token', res.data.data.token);
+                                localStorage.setItem('userInfo', JSON.stringify(res.data.data));
+                                localStorage.setItem('userRole', res.data.data.role);
+                                this.showToast('登录成功');
+                                setTimeout(() => {
+                                    if (res.data.data.role === 1) {
+                                        window.location.href = 'student.html';
+                                    } else {
+                                        window.location.href = 'admin.html';
+                                    }
+                                }, 1000);
+                            } else {
+                                this.showToast(res.data.msg, 'error');
+                                this.generateCaptcha();
+                            }
+                        });
+                },
+                register() {
+                    if (!this.registerForm.account || !this.registerForm.password || !this.registerForm.confirmPassword || !this.registerForm.captcha) {
+                        this.showToast('请填写完整信息', 'error');
+                        return;
+                    }
+                    if (this.registerForm.password !== this.registerForm.confirmPassword) {
+                        this.showToast('两次密码输入不一致', 'error');
+                        return;
+                    }
+                    axios.post('/api/user/register', {
+                        // this.registerForm
+                        // (confirmPassword多余，只传递必要字段)
+                        account: this.registerForm.account,
+                        password: this.registerForm.password,
+                        role: this.registerForm.role,
+                        captcha: this.registerForm.captcha
+                    }).then(res => {
+                        if (res.data.code === 200) {
+                            this.showToast('注册成功，请登录');
+                            this.loginTab = 'login';
+                            this.generateCaptcha();
+                        } else {
+                            this.showToast(res.data.msg, 'error');
+                            this.generateCaptcha();
+                        }
+                    });
+                },
+                showToast(message, type = 'success') {
+                    this.toast.message = message;
+                    this.toast.type = type;
+                    this.toast.show = true;
+                    setTimeout(() => {
+                        this.toast.show = false;
+                    }, 3000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

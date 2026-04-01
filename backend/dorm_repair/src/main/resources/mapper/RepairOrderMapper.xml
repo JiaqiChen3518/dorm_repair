@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qg.dorm.mapper.RepairOrderMapper">
+
+    <!-- 修复订单结果映射 -->
+    <resultMap id="RepairOrderResultMap" type="com.qg.dorm.entity.RepairOrder">
+        <id property="id" column="id"/>
+        <result property="orderNo" column="order_no"/>
+        <result property="userId" column="user_id"/>
+        <result property="building" column="building"/>
+        <result property="room" column="room"/>
+        <result property="deviceType" column="device_type"/>
+        <result property="priority" column="priority"/>
+        <result property="description" column="description"/>
+        <result property="images" column="images"/>
+        <result property="status" column="status"/>
+        <result property="handlerId" column="handler_id"/>
+        <result property="handleNote" column="handle_note"/>
+        <result property="createTime" column="create_time"/>
+        <result property="handleTime" column="handle_time"/>
+        <result property="finishTime" column="finish_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="userName" column="user_name"/>
+        <result property="handlerName" column="handler_name"/>
+        <result property="hasEvaluation" column="has_evaluation"/>
+    </resultMap>
+
+    <!-- 插入修复订单 -->
+    <insert id="insert" parameterType="com.qg.dorm.entity.RepairOrder" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO repair_order (order_no, user_id, building, room, device_type, priority, description, images, status, create_time)
+        VALUES (#{orderNo}, #{userId}, #{building}, #{room}, #{deviceType}, #{priority}, #{description}, #{images}, #{status}, NOW())
+    </insert>
+
+    <!-- 根据ID查询修复订单 -->
+    <select id="selectById" parameterType="long" resultMap="RepairOrderResultMap">
+        SELECT o.*, u.name as user_name
+        FROM repair_order o
+        LEFT JOIN user u ON o.user_id = u.id
+        WHERE o.id = #{id}
+    </select>
+
+    <!-- 根据订单号查询修复订单 -->
+    <select id="selectByOrderNo" parameterType="string" resultMap="RepairOrderResultMap">
+        SELECT o.*, u.name as user_name
+        FROM repair_order o
+        LEFT JOIN user u ON o.user_id = u.id
+        WHERE o.order_no = #{orderNo}
+    </select>
+
+    <!-- 根据用户ID查询修复订单 -->
+    <select id="selectByUserId" parameterType="long" resultMap="RepairOrderResultMap">
+        SELECT o.*, u.name as user_name, h.name as handler_name,
+               CASE WHEN e.id IS NOT NULL THEN 1 ELSE 0 END as has_evaluation
+        FROM repair_order o
+        LEFT JOIN user u ON o.user_id = u.id
+        LEFT JOIN user h ON o.handler_id = h.id
+        LEFT JOIN evaluation e ON o.id = e.order_id
+        WHERE o.user_id = #{userId}
+        <if test="status != null">
+            AND o.status = #{status}
+        </if>
+        ORDER BY o.create_time DESC
+    </select>
+
+    <!-- 查询所有修复订单 -->
+    <select id="selectAll" resultMap="RepairOrderResultMap">
+        SELECT o.*, u.name as user_name, h.name as handler_name,
+               CASE WHEN e.id IS NOT NULL THEN 1 ELSE 0 END as has_evaluation
+        FROM repair_order o
+        LEFT JOIN user u ON o.user_id = u.id
+        LEFT JOIN user h ON o.handler_id = h.id
+        LEFT JOIN evaluation e ON o.id = e.order_id
+        <where>
+            <if test="status != null">
+                AND o.status = #{status}
+            </if>
+            <if test="building != null and building != ''">
+                AND o.building = #{building}
+            </if>
+        </where>
+        ORDER BY o.priority ASC, o.create_time DESC
+    </select>
+
+    <!-- 更新修复订单状态 -->
+    <update id="updateStatus">
+        UPDATE repair_order
+        SET status = #{status}, handler_id = #{handlerId}, handle_time = NOW(), update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 取消修复订单 -->
+    <update id="cancelOrder" parameterType="long">
+        UPDATE repair_order
+        SET status = 3, update_time = NOW()
+        WHERE id = #{id} AND status = 0
+    </update>
+
+    <!-- 删除修复订单 -->
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM repair_order WHERE id = #{id}
+    </delete>
+
+    <!-- 完成修复订单 -->
+    <update id="completeOrder">
+        UPDATE repair_order
+        SET handle_note = #{note}, status = 2, finish_time = NOW(), update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 根据状态查询修复订单数量 -->
+    <select id="countByStatus" parameterType="int" resultType="int">
+        SELECT COUNT(*) FROM repair_order WHERE status = #{status}
+    </select>
+
+    <!-- 查询所有修复订单数量 -->
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM repair_order
+    </select>
+
+</mapper>

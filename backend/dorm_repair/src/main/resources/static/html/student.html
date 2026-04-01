@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宿舍报修管理系统 - 学生</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="card">
+                <div class="user-info">
+                    <div>
+                        <strong>👤 {{ userInfo.account }}</strong>
+                        <span style="margin-left: 10px; color: #666;">学生</span>
+                        <span v-if="userInfo.isBound" style="margin-left: 10px; color: #4caf50;">📍 {{ userInfo.building }}-{{ userInfo.room }}</span>
+                    </div>
+                    <div>
+                        <span class="notification-badge" style="margin-right: 20px; cursor: pointer;" @click="showNotificationModal">
+                            🔔
+                            <span v-if="unreadCount > 0" class="notification-count">{{ unreadCount }}</span>
+                        </span>
+                        <button class="btn btn-secondary" @click="logout">退出</button>
+                    </div>
+                </div>
+
+                <div v-if="!userInfo.isBound && currentView !== 'bindDormitory'" class="card" style="background: #fff3cd; border: 1px solid #ffc107;">
+                    <p>⚠️ 您还未绑定宿舍，请先绑定宿舍信息</p>
+                    <button class="btn btn-warning" @click="currentView = 'bindDormitory'">立即绑定</button>
+                </div>
+
+                <!-- 菜单 -->
+                <div v-if="currentView === 'menu'" class="menu-grid">
+                    <div class="menu-item" @click="currentView = 'bindDormitory'">
+                        <span>🏠</span>
+                        <div>绑定/修改宿舍</div>
+                    </div>
+                    <div class="menu-item" @click="showCreateOrder">
+                        <span>📝</span>
+                        <div>创建报修单</div>
+                    </div>
+                    <div class="menu-item" @click="currentView = 'myOrders'; loadMyOrders()">
+                        <span>📋</span>
+                        <div>我的报修记录</div>
+                    </div>
+                    <div class="menu-item" @click="currentView = 'notifications'; loadNotifications()">
+                        <span>🔔</span>
+                        <div>消息通知</div>
+                    </div>
+                    <div class="menu-item" @click="currentView = 'profile'">
+                        <span>⚙️</span>
+                        <div>修改密码</div>
+                    </div>
+                </div>
+
+                <!-- 绑定/修改宿舍 -->
+                <div v-if="currentView === 'bindDormitory'">
+                    <h3 style="margin-bottom: 20px;">{{ userInfo.isBound ? '修改宿舍' : '绑定宿舍' }}</h3>
+                    <div class="form-group">
+                        <label>宿舍楼栋</label>
+                        <input type="text" v-model="dormForm.building" placeholder="如：A1, B2">
+                    </div>
+                    <div class="form-group">
+                        <label>房间号</label>
+                        <input type="text" v-model="dormForm.room" placeholder="如：301, 402">
+                    </div>
+                    <button class="btn btn-primary" @click="bindDormitory">保存</button>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'">返回</button>
+                </div>
+
+                <!-- 创建报修单 -->
+                <div v-if="currentView === 'createOrder'">
+                    <h3 style="margin-bottom: 20px;">创建报修单</h3>
+                    <div class="form-group">
+                        <label>宿舍楼栋</label>
+                        <input type="text" v-model="orderForm.building" placeholder="宿舍楼栋" readonly style="background-color: #f5f5f5;">
+                    </div>
+                    <div class="form-group">
+                        <label>房间号</label>
+                        <input type="text" v-model="orderForm.room" placeholder="房间号" readonly style="background-color: #f5f5f5;">
+                    </div>
+                    <div class="form-group">
+                        <label>设备类型</label>
+                        <select v-model="orderForm.deviceType">
+                            <option :value="1">水龙头</option>
+                            <option :value="2">电灯</option>
+                            <option :value="3">门窗</option>
+                            <option :value="4">空调</option>
+                            <option :value="5">热水器</option>
+                            <option :value="6">其他</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <select v-model="orderForm.priority">
+                            <option :value="1">紧急</option>
+                            <option :value="2">普通</option>
+                            <option :value="3">低</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>问题描述</label>
+                        <textarea v-model="orderForm.description" placeholder="请详细描述问题..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>上传图片</label>
+                        <input type="file" ref="fileInput" @change="handleFileChange" accept="image/*" multiple style="display: none;">
+                        <button class="btn btn-secondary" @click="$refs.fileInput.click()">选择图片</button>
+                        <div v-if="previewImages.length > 0" class="image-preview">
+                            <div v-for="(img, index) in previewImages" :key="index" class="image-preview-item">
+                                <img :src="img">
+                                <button class="remove-btn" @click="removeImage(index)">×</button>
+                            </div>
+                        </div>
+                        <div v-if="orderForm.images" class="image-count">
+                            已上传 {{ uploadedImageCount }} 张图片
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" @click="createOrder">提交</button>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'">返回</button>
+                </div>
+
+                <!-- 我的报修记录 -->
+                <div v-if="currentView === 'myOrders'">
+                    <h3 style="margin-bottom: 20px;">我的报修记录</h3>
+                    <div class="filter-bar">
+                        <select v-model="orderFilter" @change="loadMyOrders">
+                            <option :value="null">全部状态</option>
+                            <option :value="0">待处理</option>
+                            <option :value="1">处理中</option>
+                            <option :value="2">已完成</option>
+                            <option :value="3">已取消</option>
+                        </select>
+                    </div>
+                    <div v-if="myOrders.length === 0" class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <p>暂无报修记录</p>
+                    </div>
+                    <table v-else class="table">
+                        <thead>
+                            <tr>
+                                <th>单号</th>
+                                <th>设备</th>
+                                <th>优先级</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="order in myOrders" :key="order.id">
+                                <td>{{ order.orderNo }}</td>
+                                <td>{{ getDeviceTypeText(order.deviceType) }}</td>
+                                <td><span class="badge" :class="'badge-' + getPriorityClass(order.priority)">{{ getPriorityText(order.priority) }}</span></td>
+                                <td><span class="badge" :class="'badge-' + getStatusClass(order.status)">{{ getStatusText(order.status) }}</span></td>
+                                <td>{{ formatDate(order.createTime) }}</td>
+                                <td>
+                                    <button class="btn btn-secondary" style="padding: 6px 12px;" @click="viewOrderDetail(order)">详情</button>
+                                    <button v-if="order.status === 0" class="btn btn-danger" style="padding: 6px 12px;" @click="cancelOrder(order.id)">取消</button>
+                                    <button v-if="order.status === 2 && !order.hasEvaluation" class="btn btn-success" style="padding: 6px 12px;" @click="openEvaluation(order)">评价</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'" style="margin-top: 20px;">返回</button>
+                </div>
+
+                <!-- 消息通知 -->
+                <div v-if="currentView === 'notifications'">
+                    <h3 style="margin-bottom: 20px;">消息通知</h3>
+                    <button class="btn btn-secondary" style="margin-bottom: 20px;" @click="markAllAsRead">全部已读</button>
+                    <div v-if="notifications.length === 0" class="empty-state">
+                        <div class="empty-state-icon">🔔</div>
+                        <p>暂无通知</p>
+                    </div>
+                    <div v-else>
+                        <div v-for="notif in notifications" :key="notif.id" class="card" :style="{background: notif.isRead ? '#f9f9f9' : '#e3f2fd'}">
+                            <h4>{{ notif.title }}</h4>
+                            <p>{{ notif.content }}</p>
+                            <small style="color: #999;">{{ formatDate(notif.createTime) }}</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'" style="margin-top: 20px;">返回</button>
+                </div>
+
+                <!-- 修改密码 -->
+                <div v-if="currentView === 'profile'">
+                    <h3 style="margin-bottom: 20px;">修改密码</h3>
+                    <div class="form-group">
+                        <label>原密码</label>
+                        <input type="password" v-model="passwordForm.oldPassword" placeholder="请输入原密码">
+                    </div>
+                    <div class="form-group">
+                        <label>新密码</label>
+                        <input type="password" v-model="passwordForm.newPassword" placeholder="请输入新密码">
+                    </div>
+                    <div class="form-group">
+                        <label>确认新密码</label>
+                        <input type="password" v-model="passwordForm.confirmPassword" placeholder="请再次输入新密码">
+                    </div>
+                    <button class="btn btn-primary" @click="updatePassword">保存</button>
+                    <button class="btn btn-secondary" @click="currentView = 'menu'">返回</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 报修单详情弹窗 -->
+        <div v-if="showOrderDetail" class="modal-overlay" @click.self="showOrderDetail = false">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>📋 报修单详情</h3>
+                    <button class="modal-close" @click="showOrderDetail = false">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">单号</span>
+                        <span class="order-detail-value">{{ selectedOrder.orderNo }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">报修人</span>
+                        <span class="order-detail-value">{{ selectedOrder.userName }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">宿舍</span>
+                        <span class="order-detail-value">{{ selectedOrder.building }}-{{ selectedOrder.room }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">设备类型</span>
+                        <span class="order-detail-value">{{ getDeviceTypeText(selectedOrder.deviceType) }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">优先级</span>
+                        <span class="order-detail-value">{{ getPriorityText(selectedOrder.priority) }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">状态</span>
+                        <span class="order-detail-value">
+                            <span class="order-status-badge" :class="getStatusClass(selectedOrder.status)">
+                                {{ getStatusText(selectedOrder.status) }}
+                            </span>
+                        </span>
+                    </div>
+                    <div class="order-detail-item" style="flex-direction: column;">
+                        <span class="order-detail-label" style="margin-bottom: 8px;">问题描述</span>
+                        <span class="order-detail-value description">{{ selectedOrder.description }}</span>
+                    </div>
+                    <div v-if="selectedOrder.images && selectedOrder.images.trim()" class="order-detail-item" style="flex-direction: column;">
+                        <span class="order-detail-label" style="margin-bottom: 8px;">报修图片</span>
+                        <div class="image-gallery">
+                            <div class="gallery-images">
+                                <img v-for="(img, index) in selectedOrder.images.split(',')" :key="index" :src="img.trim()" 
+                                     @click="window.open(img.trim(), '_blank')"
+                                     @error="console.error('图片加载失败:', img)">
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="selectedOrder.handleNote" class="order-detail-item" style="flex-direction: column;">
+                        <span class="order-detail-label" style="margin-bottom: 8px;">处理备注</span>
+                        <span class="order-detail-value description">{{ selectedOrder.handleNote }}</span>
+                    </div>
+                    <div class="order-detail-item">
+                        <span class="order-detail-label">创建时间</span>
+                        <span class="order-detail-value" style="color: #999; font-weight: 400;">{{ formatDate(selectedOrder.createTime) }}</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showOrderDetail = false">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 评价弹窗 -->
+        <div v-if="showEvaluationModal" class="modal-overlay" @click.self="showEvaluationModal = false">
+            <div class="modal">
+                <h3 style="margin-bottom: 20px;">评价维修服务</h3>
+                <div class="form-group">
+                    <label>评分</label>
+                    <div class="rating">
+                        <span v-for="n in 5" :key="n" class="star" :class="{active: n <= evaluationForm.rating}" @click="evaluationForm.rating = n">★</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>评价内容</label>
+                    <textarea v-model="evaluationForm.content" placeholder="请输入您的评价..."></textarea>
+                </div>
+                <button class="btn btn-primary" @click="submitEvaluation">提交评价</button>
+                <button class="btn btn-secondary" @click="showEvaluationModal = false">取消</button>
+            </div>
+        </div>
+
+        <!-- 消息通知弹窗 -->
+        <div v-if="showNotifications" class="modal-overlay" @click.self="showNotifications = false">
+            <div class="modal">
+                <h3 style="margin-bottom: 20px;">消息通知</h3>
+                <button class="btn btn-secondary" style="margin-bottom: 20px;" @click="markAllAsRead">全部已读</button>
+                <div v-if="notifications.length === 0" class="empty-state">
+                    <div class="empty-state-icon">🔔</div>
+                    <p>暂无通知</p>
+                </div>
+                <div v-else style="max-height: 400px; overflow-y: auto;">
+                    <div v-for="notif in notifications" :key="notif.id" class="card" :style="{background: notif.isRead ? '#f9f9f9' : '#e3f2fd', marginBottom: '10px'}">
+                        <h4>{{ notif.title }}</h4>
+                        <p>{{ notif.content }}</p>
+                        <small style="color: #999;">{{ formatDate(notif.createTime) }}</small>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" @click="closeNotificationModal" style="margin-top: 20px;">关闭</button>
+            </div>
+        </div>
+
+        <!-- 提示弹窗 -->
+        <div v-if="toast.show" class="toast" :class="'toast-' + toast.type">
+            {{ toast.message }}
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    userInfo: {},
+                    currentView: 'menu',
+                    // 宿舍相关
+                    dormForm: {
+                        building: '',
+                        room: ''
+                    },
+                    // 报修单相关
+                    orderForm: {
+                        building: '',
+                        room: '',
+                        deviceType: 1,
+                        priority: 2,
+                        description: '',
+                        images: ''
+                    },
+                    previewImages: [],
+                    uploadedImageCount: 0,
+                    selectedFiles: [],
+                    // 密码相关
+                    passwordForm: {
+                        oldPassword: '',
+                        newPassword: '',
+                        confirmPassword: ''
+                    },
+                    // 评价相关
+                    evaluationForm: {
+                        orderId: null,
+                        rating: 5,
+                        content: ''
+                    },
+                    myOrders: [],
+                    notifications: [],
+                    unreadCount: 0,
+                    orderFilter: null, // 报修单状态筛选
+                    showOrderDetail: false, // 报修单详情弹窗
+                    showEvaluationModal: false, // 评价弹窗
+                    showNotifications: false, // 消息通知弹窗
+                    selectedOrder: {},
+                    toast: {
+                        show: false,
+                        message: '',
+                        type: 'success'
+                    }
+                };
+            },
+            created() {
+                this.setupAxiosInterceptor(); // 配置axios响应拦截器
+            },
+            mounted() {
+                this.loadUserInfo();
+                this.verifySession();
+            },
+            methods: {
+                // 配置axios响应拦截器，处理401未授权错误,如果返回401,则跳转到登录页
+                setupAxiosInterceptor() {
+                    axios.interceptors.request.use(
+                        config => {
+                            const token = localStorage.getItem('token');
+                            if (token) {
+                                config.headers.Authorization = 'Bearer ' + token;
+                            }
+                            return config;
+                        },
+                        error => {
+                            return Promise.reject(error);
+                        }
+                    );
+                    axios.interceptors.response.use(
+                        response => response,
+                        error => {
+                            if (error.response && error.response.status === 401) {
+                                this.handleSessionExpired();
+                            }
+                            return Promise.reject(error);
+                        }
+                    );
+                },
+                loadUserInfo() {
+                    const userInfo = localStorage.getItem('userInfo');
+                    if (userInfo) {
+                        this.userInfo = JSON.parse(userInfo);
+                    } else {
+                        window.location.href = 'login.html';
+                    }
+                },
+                // 验证会话是否过期，通过调用后端接口检查用户信息
+                verifySession() {
+                    axios.get('/api/user/info')
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.getUnreadCount();
+                            } else {
+                                this.handleSessionExpired();
+                            }
+                        })
+                        .catch(error => {
+                            if (error.response && error.response.status === 401) {
+                                this.handleSessionExpired();
+                            } else {
+                                console.error('验证session失败:', error);
+                            }
+                        });
+                },
+                // 处理会话过期，清除本地存储的用户信息和角色，提示用户重新登录
+                handleSessionExpired() {
+                    localStorage.removeItem('userInfo');
+                    localStorage.removeItem('userRole');
+                    this.showToast('登录已过期，请重新登录', 'error');
+                    setTimeout(() => {
+                        window.location.href = 'login.html';
+                    }, 1000);
+                },
+                // 注销登录，调用后端接口注销用户会话，清除本地存储的用户信息和角色，并重定向到登录页
+                logout() {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('userInfo');
+                    localStorage.removeItem('userRole');
+                    window.location.href = 'login.html';
+                },
+                // 绑定宿舍，调用后端接口绑定用户宿舍信息，更新本地用户信息
+                bindDormitory() {
+                    axios.post('/api/user/bindDormitory', this.dormForm)
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.showToast('绑定成功');
+                                this.userInfo.isBound = 1;
+                                this.userInfo.building = this.dormForm.building;
+                                this.userInfo.room = this.dormForm.room;
+                                localStorage.setItem('userInfo', JSON.stringify(this.userInfo));
+                                this.currentView = 'menu';
+                            } else {
+                                this.showToast(res.data.msg, 'error');
+                            }
+                        });
+                },
+                // 显示创建报修单页面，检查用户是否绑定宿舍信息
+                showCreateOrder() {
+                    if (!this.userInfo.isBound) {
+                        this.showToast('请先绑定宿舍信息', 'error');
+                        this.currentView = 'bindDormitory';
+                        return;
+                    }
+                    this.orderForm.building = this.userInfo.building;
+                    this.orderForm.room = this.userInfo.room;
+                    this.currentView = 'createOrder';
+                    this.resetImages();
+                },
+                resetImages() {
+                    this.previewImages = [];
+                    this.selectedFiles = [];
+                    this.uploadedImageCount = 0;
+                    this.orderForm.images = '';
+                },
+                handleFileChange(event) {
+                    const files = event.target.files;
+                    if (!files || files.length === 0) return;
+
+                    const maxFiles = 5;
+                    if (this.selectedFiles.length + files.length > maxFiles) {
+                        this.showToast(`最多只能上传${maxFiles}张图片`, 'error');
+                        return;
+                    }
+
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        if (!file.type.startsWith('image/')) {
+                            this.showToast('只能上传图片文件', 'error');
+                            continue;
+                        }
+
+                        if (file.size > 10 * 1024 * 1024) {
+                            this.showToast('图片大小不能超过10MB', 'error');
+                            continue;
+                        }
+
+                        this.selectedFiles.push(file);
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.previewImages.push(e.target.result);
+                        };
+                        reader.readAsDataURL(file);
+                    }
+
+                    event.target.value = '';
+                },
+                removeImage(index) {
+                    this.previewImages.splice(index, 1);
+                    this.selectedFiles.splice(index, 1);
+                },
+                async uploadImages() {
+                    if (this.selectedFiles.length === 0) {
+                        return '';
+                    }
+
+                    const imageUrls = [];
+                    for (let i = 0; i < this.selectedFiles.length; i++) {
+                        const file = this.selectedFiles[i];
+                        const formData = new FormData();
+                        formData.append('file', file);
+
+                        try {
+                            const res = await axios.post('/api/file/upload', formData, {
+                                headers: {
+                                    'Content-Type': 'multipart/form-data'
+                                }
+                            });
+
+                            if (res.data.code === 200) {
+                                imageUrls.push(res.data.data.url);
+                            } else {
+                                throw new Error(res.data.msg || '上传失败');
+                            }
+                        } catch (error) {
+                            console.error('上传图片失败:', error);
+                            this.showToast('上传图片失败: ' + (error.response?.data?.msg || error.message), 'error');
+                            throw error;
+                        }
+                    }
+
+                    return imageUrls.join(',');
+                },
+                async createOrder() {
+                    if (!this.orderForm.description) {
+                        this.showToast('请填写问题描述', 'error');
+                        return;
+                    }
+
+                    try {
+                        if (this.selectedFiles.length > 0) {
+                            this.showToast('正在上传图片...', 'info');
+                            const imageUrls = await this.uploadImages();
+                            this.orderForm.images = imageUrls;
+                            this.uploadedImageCount = this.selectedFiles.length;
+                        }
+
+                        axios.post('/api/order/create', this.orderForm)
+                            .then(res => {
+                                if (res.data.code === 200) {
+                                    this.showToast('报修单创建成功');
+                                    this.orderForm = {
+                                        building: '',
+                                        room: '',
+                                        deviceType: 1,
+                                        priority: 2,
+                                        description: '',
+                                        images: ''
+                                    };
+                                    this.resetImages();
+                                    this.currentView = 'menu';//创建成功后返回菜单页面
+                                } else {
+                                    this.showToast(res.data.msg, 'error');
+                                }
+                            });
+                    } catch (error) {
+                        console.error('创建报修单失败:', error);
+                    }
+                },
+                // 加载我的报修记录，根据状态筛选
+                loadMyOrders() {
+                    axios.get('/api/order/myOrders', { params: { status: this.orderFilter } })
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.myOrders = res.data.data;
+                            }
+                        });
+                },
+                viewOrderDetail(order) {
+                    this.selectedOrder = order;
+                    this.showOrderDetail = true;
+                },
+                // 取消报修单，调用后端接口取消报修单，更新本地报修记录
+                cancelOrder(orderId) {
+                    if (confirm('确定要取消这个报修单吗？')) {
+                        axios.post(`/api/order/cancel/${orderId}`)
+                            .then(res => {
+                                if (res.data.code === 200) {
+                                    this.showToast('报修单已取消');
+                                    this.loadMyOrders();
+                                } else {
+                                    this.showToast(res.data.msg, 'error');
+                                }
+                            });
+                    }
+                },
+                openEvaluation(order) {
+                    this.evaluationForm.orderId = order.id;
+                    this.showEvaluationModal = true;
+                },
+                submitEvaluation() {
+                    if (!this.evaluationForm.content) {
+                        this.showToast('请输入评价内容', 'error');
+                        return;
+                    }
+                    axios.post('/api/evaluation/create', this.evaluationForm)
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.showToast('评价提交成功');
+                                this.showEvaluationModal = false;
+                                this.loadMyOrders();
+                            } else {
+                                this.showToast(res.data.msg, 'error');
+                            }
+                        });
+                },
+                // 加载我的消息通知
+                loadNotifications() {
+                    axios.get('/api/notification/myNotifications')
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.notifications = res.data.data;
+                            }
+                        });
+                },
+                showNotificationModal() {
+                    this.loadNotifications();
+                    this.showNotifications = true;
+                },
+                closeNotificationModal() {
+                    this.showNotifications = false;
+                    this.getUnreadCount();
+                },
+                // 标记全部已读，调用后端接口标记所有消息为已读，更新本地消息通知
+                markAllAsRead() {
+                    console.log('开始标记全部已读...');
+                    axios.post('/api/notification/markAllAsRead')
+                        .then(res => {
+                            console.log('标记已读响应:', res.data);
+                            if (res.data.code === 200) {
+                                this.showToast('已标记为已读');
+                                this.loadNotifications();
+                                this.getUnreadCount();
+                            } else {
+                                this.showToast(res.data.msg || '标记失败', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('标记已读失败，详细错误:', error);
+                            if (error.response) {
+                                console.error('错误状态码:', error.response.status);
+                                console.error('错误数据:', error.response.data);
+                                if (error.response.status === 401) {
+                                    this.showToast('登录已过期，请重新登录', 'error');
+                                    this.handleSessionExpired();
+                                } else {
+                                    this.showToast('服务器错误: ' + (error.response.data?.msg || '未知错误'), 'error');
+                                }
+                            } else if (error.request) {
+                                console.error('请求已发送但没有收到响应:', error.request);
+                                this.showToast('网络连接失败，请检查网络', 'error');
+                            } else {
+                                console.error('请求配置错误:', error.message);
+                                this.showToast('请求错误: ' + error.message, 'error');
+                            }
+                        });
+                },
+                getUnreadCount() {
+                    axios.get('/api/notification/unreadCount')
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.unreadCount = res.data.data;
+                            }
+                        });
+                },
+                updatePassword() {
+                    if (!this.passwordForm.oldPassword || !this.passwordForm.newPassword || !this.passwordForm.confirmPassword) {
+                        this.showToast('请填写完整信息', 'error');
+                        return;
+                    }
+                    if (this.passwordForm.newPassword !== this.passwordForm.confirmPassword) {
+                        this.showToast('两次密码输入不一致', 'error');
+                        return;
+                    }
+                    axios.post('/api/user/updatePassword', this.passwordForm)
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.showToast('密码修改成功');
+                                this.passwordForm = {
+                                    oldPassword: '',
+                                    newPassword: '',
+                                    confirmPassword: ''
+                                };
+                            } else {
+                                this.showToast(res.data.msg, 'error');
+                            }
+                        });
+                },
+                // 获取设备类型文本
+                getDeviceTypeText(type) {
+                    const types = { 1: '水龙头', 2: '电灯', 3: '门窗', 4: '空调', 5: '热水器', 6: '其他' };
+                    return types[type] || '未知';
+                },
+                // 获取优先级文本
+                getPriorityText(priority) {
+                    const priorities = { 1: '紧急', 2: '普通', 3: '低' };
+                    return priorities[priority] || '未知';
+                },
+                // 获取优先级类名，切换优先级颜色
+                getPriorityClass(priority) {
+                    const classes = { 1: 'high', 2: 'normal', 3: 'low' };
+                    return classes[priority] || 'normal';
+                },
+                // 获取状态文本
+                getStatusText(status) {
+                    const statuses = { 0: '待处理', 1: '处理中', 2: '已完成', 3: '已取消' };
+                    return statuses[status] || '未知';
+                },
+                // 获取状态类名，切换状态颜色
+                getStatusClass(status) {
+                    const classes = { 0: 'pending', 1: 'processing', 2: 'completed', 3: 'cancelled' };
+                    return classes[status] || 'pending';
+                },
+                // 格式化日期时间字符串
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    return date.toLocaleString('zh-CN');
+                },
+                // 显示提示信息，3秒后自动隐藏
+                showToast(message, type = 'success') {
+                    this.toast.message = message;
+                    this.toast.type = type;
+                    this.toast.show = true;
+                    setTimeout(() => {
+                        this.toast.show = false;
+                    }, 3000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# IDE 配置（全局）
+.idea/
+.vscode/
+
+# 日志（全局）
+logs/
+*.log
+
+# 操作系统生成文件
+.DS_Store
+Thumbs.db
+
+# 其他临时文件
+*.tmp
+*.swp
+*.swo
+
+# 可选：如果你希望忽略 node_modules（虽然 frontend 下的会自己忽略，但多写无妨）
+node_modules/
