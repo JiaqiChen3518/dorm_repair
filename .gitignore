@@ -15,5 +15,5 @@ Thumbs.db
 *.swp
 *.swo
 
-# 可选：如果你希望忽略 node_modules（虽然 frontend 下的会自己忽略，但多写无妨）
+
 node_modules/
