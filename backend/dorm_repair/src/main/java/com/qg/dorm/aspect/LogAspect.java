@@ -72,6 +72,8 @@ public class LogAspect {
         requestThreadLocal.remove();
     }
 
+    //异常已在@around中记录
+/*
     // 异常通知：方法抛出异常时
     @AfterThrowing(pointcut = "controllerPointcut() || servicePointcut()", throwing = "e")
     public void afterThrowing(JoinPoint joinPoint, Throwable e) {
@@ -85,6 +87,7 @@ public class LogAspect {
             requestThreadLocal.remove();
         }
     }
+*/
 
     // 提供静态方法获取请求
     public static HttpServletRequest getCurrentRequest() {

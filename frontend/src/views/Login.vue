@@ -141,7 +141,7 @@ const login = async () => {
     }, 1000);
   } catch (error) {
     console.error('登录失败:', error);
-    showToast('登录失败，请重试', 'error');
+     showToast(error.message || '登录失败，请重试', 'error');
     generateCaptcha();
   }
 };
@@ -171,7 +171,7 @@ const register = async () => {
     generateCaptcha();
   } catch (error) {
     console.error('注册失败:', error);
-    showToast('注册失败，请重试', 'error');
+    showToast(error.message || '注册失败，请重试', 'error');
     generateCaptcha();
   }
 };

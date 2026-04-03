@@ -3,6 +3,7 @@ package com.qg.dorm.controller;
 import com.qg.dorm.common.Result;
 import com.qg.dorm.util.OssUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/file")
 public class FileController {
@@ -31,10 +33,13 @@ public class FileController {
 
             return Result.success(data);
         } catch (IllegalArgumentException e) {
-            return Result.error(e.getMessage());
+            log.warn("参数验证失败: {}", e.getMessage());
+            return Result.error("文件参数无效，请检查文件");
         } catch (IOException e) {
-            return Result.error("文件上传失败：" + e.getMessage());
+            log.error("文件上传失败: {}", e.getMessage());
+            return Result.error("文件上传失败，请稍后重试");
         } catch (Exception e) {
+            log.error("上传异常: {}", e.getMessage(), e);
             return Result.error("上传失败，请稍后重试");
         }
     }

@@ -12,7 +12,7 @@
         </div>
         <div class="order-detail-item">
           <span class="order-detail-label">报修人</span>
-          <span class="order-detail-value">{{ order.userName }}</span>
+          <span class="order-detail-value">{{ order.account || order.userId || '未知' }}</span>
         </div>
         <div class="order-detail-item">
           <span class="order-detail-label">宿舍</span>

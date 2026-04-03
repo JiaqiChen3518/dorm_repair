@@ -35,6 +35,7 @@ public class AdminFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         HttpSession session = httpRequest.getSession();
 
+        // 检查是否为管理员路径
         String requestURI = httpRequest.getRequestURI();
         boolean isAdminPath = false;
         for (String adminPath : ADMIN_PATHS) {
@@ -44,6 +45,7 @@ public class AdminFilter implements Filter {
             }
         }
 
+        // 检查是否为管理员角色
         if (isAdminPath) {
             Integer role = (Integer) session.getAttribute("role");
             if (role == null || role != RoleConstant.ROLE_ADMIN) {
